@@ -1,0 +1,87 @@
+---
+title: "Exploratory Analysis using credit dataset"
+author: "Himansu Sahoo"
+date: "February 2, 2016"
+output: html_document
+---
+This is the example showing how to do exploratory analysis using German Credit dataset.
+In the next examples, we will apply decision tree algorithms.
+
+### Step 1 : Getting Data into R
+
+```{r}
+raw_data <- read.csv(file="../datasets/credit.csv", na.strings=c(""," ", "NA", "NAN"))
+```
+
+#### Checking the dataset 
+
+```{r}
+#class(raw_data) # data.frame
+dim(raw_data) # 1000 21
+#nrow(raw_data); ncol(raw_data)
+#names(raw_data)
+colnames(raw_data) # same as above
+str(raw_data) # will show class of each variable
+#summary(raw_data) # five number summary of the dataset
+```
+
+The dataset contains 1000 observations and 21 variables.
+rows are the observations, columns are the variables.
+The number 21 variable (default) is the response variable.
+
+#### Print some rows
+```{r}
+#head(raw_data) # will print first 6 rows
+#tail(raw_data) # will print last 6 rows
+#head(raw_data, n=50) # will print first 50 rows
+```
+
+#### Checking the response variable
+
+**default** is the response variable. Check different properties of the response variable.
+
+```{r}
+# get the column number of the default variable
+print(which(colnames(raw_data) %in% "default"))
+#print(which(colnames(raw_data) %in% c("default"))) # same as above
+#print(which(colnames(raw_data) == "default")) # same as above
+
+#class(raw_data$default) # integer
+str(raw_data$default) # int [1:1000] 1 2 1 1 2 1 1 1 1 2 ...
+#summary(raw_data$default)
+#unique(raw_data$default) # number of unique value 1 2
+```
+
+The response variable **default** is of class integer with only two unique values 1, 2. covert this to a factor variable with two levels.
+
+
+```{r}
+#raw_data$default <- as.factor(raw_data$default)
+# give them valid R names
+raw_data$default <- as.factor(ifelse(raw_data$default == 1, "NO", "YES"))
+
+#class(raw_data$default) # factor
+str(raw_data$default) ##  Factor w/ 2 levels "1","2": 1 2 1 1 2 1 1 1 1 2 ...
+#levels(raw_data$default) # "1" "2"
+table(raw_data$default)
+#summary(raw_data$default) # same as above
+prop.table(table(raw_data$default))
+```
+
+#### Check NA's in the dataset
+
+Looking at `summary(raw_data)` doesn't show any NA values.
+```{r}
+#summary(raw_data)
+colSums(is.na(raw_data))
+```
+
+
+
+
+
+
+
+
+
+

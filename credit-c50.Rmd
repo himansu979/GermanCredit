@@ -1,0 +1,193 @@
+---
+title: "Decision Tree using C5.0 algorithm"
+author: "Himansu Sahoo"
+date: "February 2, 2016"
+output: html_document
+---
+This is the example showing how to use decision tree C5.0 algorithm to analyze German Credit dataset.
+
+```{r echo=FALSE}
+library(caret)   # for createDataPartition, confusionMatrix
+library(C50)     # for C5.0 model
+library(gmodels) # for CrossTable
+library(ROCR)    # for ROC curve
+library(pROC)    # for ROC curve
+```
+
+### Step 1 : Getting Data into R
+
+```{r}
+raw_data <- read.csv(file="../datasets/credit.csv", na.strings=c(""," ", "NA", "NAN"))
+```
+
+#### Checking the response variable
+default is the response variable.
+```{r}
+#colnames(raw_data)
+which(colnames(raw_data) %in% c("default"))
+# variable 21 is the response variable.
+# checking for any NA values
+colSums(is.na(raw_data))
+```
+Here, all are zero, that means there are no NA values in the dataset.
+
+```{r}
+class(raw_data$default) # integer
+str(raw_data$default)
+#summary(raw_data$default)
+unique(raw_data$default) # it has only two values 1 and 2, convert it to a factor variable
+raw_data$default <- as.factor(ifelse(raw_data$default == 1, "NO", "YES"))
+```
+
+The response variable is an integer with two numbers only. Convert the response variable to a factor variable with two levels.
+
+```{r}
+class(raw_data$default)
+str(raw_data$default)
+summary(raw_data$default)
+table(raw_data$default) # same as above
+prop.table(table(raw_data$default))
+```
+
+
+#### Splitting data into training and testing set
+We will use `createDataPartition` function in `caret` package to split the `raw_data` into 90% train\_set and 10% test\_set. Set the seed in the beginning to reproduce the same result in future.
+
+```{r}
+set.seed(1099)
+inTrain <- createDataPartition(y=raw_data$default, p=0.90, list=FALSE)
+train_set <- raw_data[inTrain,]
+test_set <- raw_data[-inTrain,]
+
+cat("*** dimension of train_set ", dim(train_set), "\n\n")
+cat("*** dimension of test_set ", dim(test_set), "\n\n")
+
+train_per <- (nrow(train_set)/nrow(raw_data))*100
+test_per <- (nrow(test_set)/nrow(raw_data))*100
+cat("***** training dataset is ", train_per , "%\n\n")
+cat("****** testing dataset is ", test_per, "%\n\n")
+```
+
+### Step 2 : Building a Decision Tree Model using C5.0 algorithm
+
+```{r}
+#dt_model <- C5.0(x=train_set[-21], y=train_set$default)
+dt_model <- C5.0(default~., data=train_set) # same as above
+# x = first argument is a dataframe of predictors
+# y = second argument is a factor vector with 2 or more levels
+```
+
+Make sure the response variable is a factor variable, otherwise you will get the following error message. C5.0 algorithm requires a factor outcome.
+```
+Error in C5.0.default(x = train_set[-21], y = train_set$default) : 
+  C5.0 models require a factor outcome
+```
+
+#### Print different functions of the model
+```{r}
+print(dt_model)
+class(dt_model)
+names(dt_model)
+ls(dt_model) # functions are ordered in alphabatical order
+
+dt_model$call # C5.0.formula(formula = default ~ ., data = train_set)
+dt_model$dims # 900 20
+dt_model$levels # "NO" "YES"
+dt_model$size  # 78
+dt_model$predictors
+unlist(dt_model$control)
+summary(dt_model)
+```
+
+### Step 3 : Model Validation
+```{r}
+##predict(dt_model) # provide a new data argument
+##Error in predict.C5.0(dt_model) : newdata must be non-null
+# Always provide a newdata argument
+```
+
+#### Check the model performance with train_set
+```{r}
+table(train_set$default)
+#pred_train <- predict(dt_model, newdata=train_set)
+pred_train <- predict(dt_model, newdata=train_set, type="class") # same as above
+# output is a factor variable
+table(pred_train)
+confusionMatrix(pred_train, train_set$default)
+```
+
+#### Check the model performance with test_set
+```{r}
+#table(test_set$default)
+pred_test <- predict(dt_model, newdata=test_set, type="class")
+#table(pred_test)
+# generate classification table
+test_table <- table(pred_test, test_set$default)
+print(test_table)
+
+# generate confusion matrix
+#confusionMatrix(pred_test, test_set$default)
+confusionMatrix(test_table) # same as above
+
+# generate CrossTable
+#CrossTable(pred_test, test_set$default)
+CrossTable(pred_test, test_set$default, prop.chisq=FALSE, prop.c=FALSE, prop.r=FALSE, dnn=c('Prediction', 'Actual'))
+# this removes chisq, column proportion, row proportion
+```
+
+### Step 4 : Calculate ROC Curve 
+In this section, we will plot the ROC curve for the binary response and will calculate Area Under the Curve (AUC). We will use two packages to calculate ROC curve : ROCR package and pROC package.
+
+#### ROC Curve using ROCR package
+```{r}
+pred_test_prob <- predict(dt_model, newdata=test_set, type="prob")
+# output is a matrix, gives probabaility
+class(pred_test_prob) # matrix
+head(pred_test_prob)
+
+#roc_pred <- prediction(pred_test_prob[, 2], test_set$default)
+roc_pred <- prediction(pred_test_prob[, "YES"], test_set$default) # same as above
+roc_perf <- performance(roc_pred, measure="tpr", x.measure="fpr")
+
+roc_auc <- performance(roc_pred, measure="auc", x.measure="cutoff")
+auc <- unlist(roc_auc@y.values)
+cat("\n ******** Value of AUC : ", auc, "\n\n")
+#  ******** Value of AUC :  0.8097619
+
+plot(roc_perf, colorize=T, main=paste("AUC: ", roc_auc@y.values), lwd=2)
+abline(a=0, b=1, lwd=2)
+```
+
+#### ROC Curve using pROC package
+```{r}
+roc_curve <- roc(response=test_set$default, predictor=pred_test_prob[,"YES"])
+print(roc_curve)
+
+#plot(roc_curve)
+plot(roc_curve, print.thres="best", print.thres.best.method="closest.topleft")
+abline(a=1, b=-1, lwd=2)
+```
+
+### Step 5 : Prepare for submission
+```{r}
+pred_test <- predict(dt_model, newdata=test_set, type="class")
+submit_data <- data.frame(default=pred_test)
+class(submit_data)
+str(submit_data)
+table(submit_data$default)
+#write.csv(submit_data, file="output.csv", row.names=FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
