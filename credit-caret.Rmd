@@ -1,0 +1,197 @@
+---
+title: "Decision Tree using credit dataset (caret package, C5.0 algorithm)"
+author: "Himansu Sahoo"
+date: "February 14, 2016"
+output: html_document
+---
+This is the example showing how to use decision tree algorithm using caret package.
+The dataset is the credit dataset and we will use C5.0 algorithm.
+
+### Step 1 : Getting Data into R
+```{r message=FALSE}
+library(caret)       # for createDataPartition, confusionMatrix
+library(gmodels)     # for CrossTable
+library(ROCR)        # for ROC curve
+library(pROC)        # for ROC curve
+```
+
+```{r}
+raw_data <- read.csv(file="../datasets/credit.csv", na.strings=c("", " ", "NA", "NAN"))
+```
+
+#### Checking the response variable
+```{r}
+raw_data$default <- as.factor(ifelse(raw_data$default == 1, "NO", "YES"))
+```
+
+
+#### Splitting data into training and testing set
+We will use `createDataPartition` function in `caret` package to split the raw\_data into 90% train\_set and 10% test\_set. Set the seed in the beginning to reproduce the same result in the future.
+
+```{r}
+set.seed(1099)
+inTrain <- createDataPartition(y=raw_data$default, p=0.90, list=FALSE)
+train_set <- raw_data[inTrain,]
+test_set <- raw_data[-inTrain,]
+```
+
+```{r}
+cat("*** dimension of the train_set ", dim(train_set), "\n\n")
+cat("*** dimension of the test_set ", dim(test_set), "\n\n")
+```
+
+### Step 2 : Building a Decision Tree model using CARET package
+We will use `caret` package in R to build **decision Tree** model with method **C5.0** algorithm.
+The `caret` package will use the **accuracy** (on a bootstrap sample) to select the optimal model using the **largest value**.
+Specify the model type via the method parameter set to **C5.0**.
+
+```{r message=FALSE, warning=FALSE}
+dt_model <- train(default~., data=train_set, method="C5.0")
+print(dt_model) # str() will print rubbish
+#summary(dt_model) # long list of information about the tree 
+```
+
+#### Print different functions of the model
+```{r}
+class(dt_model)
+print(dt_model)
+names(dt_model)
+ls(dt_model)
+dt_model$method
+dt_model$modelType
+dt_model$call
+dt_model$metric
+dt_model$perfNames
+dt_model$bestTune
+#dt_model$coefnames
+#dt_model$xlevels
+dt_model$results
+dt_model$finalModel # the output is C5.0 object
+dt_model$bestTune
+```
+
+#### Plotting the decision tree model
+```{r}
+plot(dt_model)
+```
+
+#### Variable Importance
+```{r}
+#dt_imp <- varImp(dt_model)
+# by default varImp returns scaled results in the range 0-100, need to put scale=FALSE
+dt_imp <- varImp(dt_model, scale=FALSE)
+print(dt_imp)
+
+plot(dt_imp, top=30) # plot first 30 important variables
+
+print(varImp(dt_model$finalModel)) # prints all variables including zero importance also
+```
+
+### Step 3 : Model Validation
+#### Check the model performance with train_set
+
+```{r}
+#predict(dt_model)	
+#Error in `[.data.frame`(newdata, , object$predictors, drop = FALSE) : 
+#  undefined columns selected
+
+table(train_set$default)	
+pred_train <- predict(dt_model, newdata=train_set)
+##pred_train <- predict(dt_model, newdata=train_set, type="raw) # same as above, default is "raw" for train object
+#class(pred_train) # this is a factor variable
+table(pred_train)
+
+# generate classification table
+train_table <- table(train_prediction=pred_train, train_reference=train_set$default)
+print(train_table)
+
+# generate confusion matrix
+#print(confusionMatrix(pred_train, train_set$default)) # same as above
+print(confusionMatrix(train_table))
+```
+
+#### Check the model performance with test_set
+
+```{r}
+table(test_set$default)	
+pred_test <- predict(dt_model, newdata=test_set)
+##pred_test <- predict(dt_model, newdata=test_set, type="raw) # same as above, default is "raw" for train object
+#class(pred_test) # this is a factor variable
+table(pred_test)
+
+# generate classification table
+test_table <- table(test_prediction=pred_test, test_reference=test_set$default)
+print(test_table)
+
+# generate confusion matrix
+#print(confusionMatrix(pred_test, test_set$default)) # same as above
+print(confusionMatrix(test_table))
+
+# generate CrossTable
+#library(gmodels)
+#CrossTable(pred_test, test_set$default)
+CrossTable(pred_test, test_set$default, prop.chisq=FALSE, prop.c=FALSE, prop.r=FALSE, dnn=c('Prediction', 'Actual'))
+```
+
+### Step 4 : Calculate ROC Curve
+In this section, we will plot the ROC curve for the binary response and will calculate Area Under the Curve (AUC). We will use two packages to calculate ROC curve : ROCR package and pROC package.
+
+#### ROC Curve using ROCR package
+```{r}
+library(ROCR)
+pred_test_prob <- predict(dt_model, newdata=test_set, type="prob")
+# output is a matrix, gives probability
+class(pred_test_prob) # matrix
+print(head(pred_test_prob))
+	
+roc_pred <- prediction(pred_test_prob[, 2], test_set$default)
+roc_perf <- performance(roc_pred, measure="tpr", x.measure="fpr")
+	
+roc_auc <- performance(roc_pred, measure="auc", x.measure="cutoff")
+auc <- unlist(roc_auc@y.values)
+cat("\n ******** Value of AUC : ", auc, "\n\n")
+	
+plot(roc_perf, colorize=T, main=paste("AUC: ", roc_auc@y.values), lwd=2)
+abline(a=0, b=1, lwd=2)
+```
+
+#### ROC Curve using pROC package
+```{r}
+roc_curve <- roc(response=test_set$default, predictor=pred_test_prob$YES)
+print(roc_curve)
+#plot(roc_curve)
+plot(roc_curve, print.thres="best", print.thres.best.method="closest.topleft")
+abline(a=1, b=-1, lwd=2)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
